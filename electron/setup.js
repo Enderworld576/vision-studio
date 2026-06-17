@@ -49,7 +49,7 @@ async function checkReady(py) {
   }
 }
 
-async function runSetup(py, root, onLog) {
+async function runSetup(py, root, weightsDir, onLog) {
   const say = (m) => { if (onLog) onLog(m.endsWith('\n') ? m : m + '\n'); };
 
   // 1) Ensure a Python environment exists (dev path; packaged is prebuilt).
@@ -91,8 +91,11 @@ async function runSetup(py, root, onLog) {
   }
 
   // 4) Fetch base detector weights so the first training doesn't stall.
+  //    Download into the WRITABLE weights dir — ultralytics writes the file to
+  //    its cwd, and a packaged app's own dir is read-only.
   say('Downloading base model weights…');
-  await run(py, ['-c', "from ultralytics import YOLO; YOLO('yolo11n.pt')"], { cwd: root }, onLog);
+  fs.mkdirSync(weightsDir, { recursive: true });
+  await run(py, ['-c', "from ultralytics import YOLO; YOLO('yolo11n.pt')"], { cwd: weightsDir }, onLog);
 
   say('Setup complete.');
 }

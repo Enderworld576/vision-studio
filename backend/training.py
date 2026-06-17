@@ -156,7 +156,14 @@ class Trainer:
             self.state = "training"
             self._say(f"training yolo11{model_size} on {self.device.upper()} "
                       f"({n_train} train / {n_val} held-out val)…")
-            model = YOLO(f"yolo11{model_size}.pt")
+            # Load the base weights from a WRITABLE location. Ultralytics
+            # downloads a bare "yolo11n.pt" into the current working directory,
+            # which in a packaged app is the read-only app bundle — so give it
+            # an absolute path under work_dir (matches what first-run setup
+            # pre-downloads, so it's reused rather than re-fetched).
+            self.work_dir.mkdir(parents=True, exist_ok=True)
+            base_weights = self.work_dir / f"yolo11{model_size}.pt"
+            model = YOLO(str(base_weights))
 
             def on_epoch(trainer):
                 self.epoch = int(trainer.epoch) + 1

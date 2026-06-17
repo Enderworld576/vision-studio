@@ -79,7 +79,10 @@ ipcMain.handle('vs:browseFile', async (_e, filters) => {
 // --- IPC: first-run setup -------------------------------------------------
 ipcMain.handle('setup:run', async () => {
   try {
-    await setup.runSetup(PY, ROOT, (m) => { if (setupWin) setupWin.webContents.send('setup:log', m); });
+    // Weights download must land in a writable dir; use the trainer's work_dir
+    // (DATA_DIR/work) so the pre-fetched base model is reused at train time.
+    const weightsDir = path.join(DATA_DIR, 'work');
+    await setup.runSetup(PY, ROOT, weightsDir, (m) => { if (setupWin) setupWin.webContents.send('setup:log', m); });
     try { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(MARKER, new Date().toISOString()); } catch {}
     return { ok: true };
   } catch (e) {
