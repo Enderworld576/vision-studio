@@ -1,0 +1,10 @@
+# Vision Studio backend — one environment for camera + ML.
+# Verified to coexist on CPython 3.14 (DepthAI v3, Ultralytics/torch, OpenCV).
+depthai>=3.0.0           # OAK 4 (RVC4) camera
+ultralytics>=8.3.0       # YOLO11 training + inference (pulls torch, torchvision)
+opencv-python-headless>=4.10  # image processing (orientation)
+flask>=3.0               # HTTP API + UI serving
+
+# Tip: to shrink the download, install CPU-only torch first:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# then `pip install -r requirements.txt`.

@@ -1,0 +1,6 @@
+# Python deps to run the exported model + orientation pipeline.
+ultralytics>=8.3        # YOLO inference (loads model.pt or model.onnx)
+opencv-python>=4.10     # image processing (orientation)
+numpy>=1.24
+# For ONNX without PyTorch/Ultralytics, use onnxruntime + your own YOLO
+# post-processing instead (see README.md).

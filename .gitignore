@@ -1,0 +1,23 @@
+# Python environment
+.venv/
+__pycache__/
+*.pyc
+get-pip.py
+
+# Runtime caches (DepthAI telemetry, etc.)
+.cache/
+
+# Node / Electron
+node_modules/
+
+# User data & training artifacts (never commit)
+data/
+runs/
+*.pt
+*.onnx
+*.orient.npz
+
+# Packaging output & bundled runtime (large; build locally)
+dist/
+installers/
+pyenv/

@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vision Studio</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">◎</div>
+      <div><h1>Vision Studio<span>part detection &amp; pose</span></h1></div>
+    </div>
+    <nav class="nav" id="nav">
+      <button data-view="home" class="active"><span class="ico">⌂</span> Home</button>
+      <button data-view="collect"><span class="ico">▣</span> Collect <span class="step">1</span></button>
+      <button data-view="train"><span class="ico">⚙</span> Train <span class="step">2</span></button>
+      <button data-view="test"><span class="ico">⊹</span> Test <span class="step">3</span></button>
+    </nav>
+    <div class="foot">OAK 4 · YOLO11 · on-device camera</div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <h2 id="title">Home</h2>
+      <div class="spacer"></div>
+      <span class="pill"><span class="dot" id="camDot"></span><span id="camText">camera…</span></span>
+      <span class="pill"><span class="dot" id="modelDot"></span><span id="modelText">model…</span></span>
+    </header>
+
+    <!-- HOME -->
+    <section class="view" id="view-home">
+      <div class="grid cards" id="homeCards">
+        <div class="card"><h3>Camera</h3><div class="num" id="cardCam">—</div><div class="sub" id="cardCamSub">OAK 4 status</div></div>
+        <div class="card"><h3>Dataset</h3><div class="num" id="cardImgs">—</div><div class="sub">labeled images</div></div>
+        <div class="card"><h3>Model</h3><div class="num" id="cardModel">—</div><div class="sub" id="cardModelSub">active model</div></div>
+      </div>
+      <div class="sp"></div>
+      <div class="grid cols-2">
+        <div class="panel">
+          <h3>How it works</h3>
+          <ol class="steps">
+            <li><div><b>Collect</b><small>Point the camera at the part, draw a box around it, and save snapshots. Aim for 30+ from different angles.</small></div></li>
+            <li><div><b>Train</b><small>One click trains a model on your images. Takes a few minutes; progress shows live.</small></div></li>
+            <li><div><b>Test</b><small>See the part detected live — its pixel location and orientation, relative to a default you set.</small></div></li>
+          </ol>
+          <div class="sp"></div>
+          <button class="btn" onclick="go('collect')">Start collecting →</button>
+        </div>
+        <div class="panel">
+          <h3>Camera</h3>
+          <label class="fld">Choose a camera
+            <div class="row">
+              <select id="cameraSelect" style="flex:1"></select>
+              <button class="btn ghost" id="scanBtn">Scan</button>
+              <button class="btn" id="useSelectedBtn">Connect</button>
+            </div>
+          </label>
+          <div class="sp"></div>
+          <div id="customRow" style="display:none">
+            <label class="fld">Connect by address
+              <div class="row">
+                <select id="kindSelect">
+                  <option value="oak">OAK 4 (IP)</option>
+                  <option value="ip">IP / RTSP / HTTP</option>
+                  <option value="usb">USB index</option>
+                </select>
+                <input type="text" id="sourceInput" placeholder="169.254.155.80 · rtsp://… · 0" style="flex:1">
+                <button class="btn" id="connectBtn">Connect</button>
+              </div>
+            </label>
+          </div>
+          <div class="status-msg muted" id="homeMsg"></div>
+        </div>
+      </div>
+      <div class="sp"></div>
+      <div class="panel">
+        <h3>Import &amp; export</h3>
+        <div class="muted" style="font-size:12px;margin-bottom:12px">Bring in images/models you already have, or export this dataset to use elsewhere. Imports and exports <b>copy</b> data, so this workspace stays self-contained.</div>
+        <div class="grid cols-2">
+          <label class="fld">Import images + labels (a YOLO dataset folder)
+            <div class="row">
+              <input type="text" id="importDsPath" placeholder="/path/to/dataset" style="flex:1">
+              <button class="btn ghost browse" data-target="importDsPath" data-mode="folder">Browse…</button>
+              <button class="btn" id="importDsBtn">Import</button>
+            </div>
+          </label>
+          <label class="fld">Import a trained model (.pt file)
+            <div class="row">
+              <input type="text" id="importModelPath" placeholder="/path/to/model.pt" style="flex:1">
+              <button class="btn ghost browse" data-target="importModelPath" data-mode="file">Browse…</button>
+              <button class="btn" id="importModelBtn">Import</button>
+            </div>
+          </label>
+        </div>
+        <div class="sp"></div>
+        <label class="fld">Export this dataset (a portable YOLO .zip) to a folder
+          <div class="row">
+            <input type="text" id="exportPath" placeholder="/path/to/destination/folder" style="flex:1">
+            <button class="btn ghost browse" data-target="exportPath" data-mode="folder">Browse…</button>
+            <button class="btn" id="exportBtn">Export dataset</button>
+          </div>
+        </label>
+        <div class="sp"></div>
+        <label class="fld">Export a trained model (runnable bundle: code + .pt + ONNX + README) — use it in your own programs
+          <div class="row" style="margin-bottom:8px">
+            <span class="muted" style="align-self:center">Model:</span>
+            <select id="exportModelSelect" style="flex:1"></select>
+            <button class="btn ghost" id="delModelBtn" title="delete this model">🗑 Delete</button>
+          </div>
+          <div class="row" id="delModelConfirm" style="display:none; margin-bottom:8px">
+            <span class="status-msg err" id="delModelMsg" style="flex:1"></span>
+            <button class="btn" id="delModelYes" style="background:var(--bad)">Yes, delete</button>
+            <button class="btn ghost" id="delModelNo">Cancel</button>
+          </div>
+          <div class="row">
+            <input type="text" id="exportModelPath" placeholder="/path/to/destination/folder" style="flex:1">
+            <button class="btn ghost browse" data-target="exportModelPath" data-mode="folder">Browse…</button>
+            <button class="btn" id="exportModelBtn">Export model</button>
+          </div>
+        </label>
+        <div class="sp"></div>
+        <div class="status-msg muted" id="importMsg"></div>
+      </div>
+    </section>
+
+    <!-- COLLECT -->
+    <section class="view hidden" id="view-collect">
+      <div class="grid cols-2">
+        <div class="panel">
+          <h3>Capture</h3>
+          <div class="viewport" id="collectVp">
+            <img id="collectFeed" alt="">
+            <canvas id="collectCanvas"></canvas>
+            <div class="hint" id="collectHint">Camera not streaming.</div>
+          </div>
+          <div class="sp"></div>
+          <div class="row">
+            <label class="fld" style="flex:1">Part / class
+              <div class="row">
+                <select id="classSelect" style="flex:1"></select>
+                <button class="btn ghost" id="addClassBtn">+ New</button>
+                <button class="btn ghost" id="delClassBtn" title="delete this part/class">🗑</button>
+              </div>
+            </label>
+          </div>
+          <div class="row" id="newClassRow" style="display:none; margin-top:8px">
+            <input type="text" id="newClassInput" placeholder="new part name" style="flex:1">
+            <button class="btn" id="newClassConfirm">Add</button>
+            <button class="btn ghost" id="newClassCancel">Cancel</button>
+          </div>
+          <div class="row" id="delClassRow" style="display:none; margin-top:8px">
+            <span class="status-msg err" id="delClassMsg" style="flex:1"></span>
+            <button class="btn" id="delClassYes" style="background:var(--bad)">Yes, delete</button>
+            <button class="btn ghost" id="delClassNo">Cancel</button>
+          </div>
+          <div class="sp"></div>
+          <div class="row">
+            <button class="btn" id="captureBtn">◉ Capture frame</button>
+            <button class="btn ghost" id="clearBoxBtn" disabled>Clear box</button>
+            <button class="btn" id="saveBtn" disabled>Save sample</button>
+          </div>
+          <div class="status-msg muted" id="collectMsg">Capture a frame, draw a box, then click the <b>FRONT</b> and <b>BACK</b> of the part so the model learns its direction. Click a saved image to edit it.</div>
+        </div>
+        <div class="panel">
+          <h3>Dataset <span class="muted" id="dsCount"></span>
+            <button class="btn ghost" id="clearDsBtn" style="float:right; padding:4px 10px; font-size:12px">Clear…</button>
+          </h3>
+          <div class="row" id="clearDsConfirm" style="display:none; margin-bottom:12px">
+            <span class="status-msg err" id="clearDsMsg" style="flex:1"></span>
+            <button class="btn" id="clearDsYes" style="background:var(--bad)">Yes, delete all</button>
+            <button class="btn ghost" id="clearDsNo">Cancel</button>
+          </div>
+          <div class="row" id="filterTabs" style="gap:6px; margin-bottom:14px"></div>
+          <div class="gallery" id="gallery"></div>
+          <div class="row" id="pager" style="justify-content:center; margin-top:16px; gap:16px">
+            <button class="btn ghost" id="prevPage">‹ Prev</button>
+            <span class="muted" id="pageInfo"></span>
+            <button class="btn ghost" id="nextPage">Next ›</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TRAIN -->
+    <section class="view hidden" id="view-train">
+      <div class="grid cols-2">
+        <div class="panel">
+          <h3>Train a model</h3>
+          <label class="fld">Part / class
+            <select id="trainClass"></select></label>
+          <div class="sp"></div>
+          <div class="row">
+            <label class="fld" style="flex:1">Model size
+              <select id="modelSize">
+                <option value="n" selected>Nano — fastest (default)</option>
+                <option value="s">Small — more accurate</option>
+                <option value="m">Medium — most accurate, slowest</option>
+              </select></label>
+            <label class="fld" style="flex:1">Training length (epochs)
+              <input type="number" id="epochs" value="150" min="20" max="400" step="10"></label>
+          </div>
+          <div class="sp"></div>
+          <label class="row" id="dsNegRow" style="gap:8px; font-size:13px; cursor:pointer">
+            <input type="checkbox" id="dsNeg" checked>
+            Use my other labeled parts as negatives (helps tell look-alikes apart)
+          </label>
+          <div class="muted" id="multiNote" style="display:none; font-size:12px">All labeled parts are detected together — each becomes its own class, so they're learned apart automatically. Your negative-example images are included as background.</div>
+          <div class="sp"></div>
+          <div id="healthPanel" style="font-size:12px"></div>
+          <div class="sp"></div>
+          <button class="btn" id="trainBtn">▶ Start training</button>
+          <div class="muted" id="gpuLine" style="font-size:12px; margin-top:10px"></div>
+          <div class="muted" style="font-size:12px; margin-top:6px">~15–20% of images are held out for validation (never trained on), so the accuracy below is honest. You can leave this tab; training keeps going.</div>
+        </div>
+        <div class="panel">
+          <h3>Progress</h3>
+          <div class="row" style="justify-content:space-between">
+            <span id="trainState" class="muted">idle</span>
+            <span id="trainMap" class="muted"></span>
+          </div>
+          <div class="sp"></div>
+          <div class="bar"><div id="trainBar"></div></div>
+          <div class="sp"></div>
+          <div class="log" id="trainLog"></div>
+          <div id="trainResult" style="display:none; margin-top:14px">
+            <div id="trainMetrics" class="row" style="gap:20px; margin-bottom:10px"></div>
+            <div class="muted" style="font-size:12px; margin-bottom:6px">Held-out validation images with the model's predictions (real performance):</div>
+            <div id="valPreviews"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sp"></div>
+      <div class="panel">
+        <h3>Negative examples <span class="muted" id="negCount"></span></h3>
+        <div class="muted" style="font-size:12px; margin-bottom:10px">Add images of <b>look-alike objects that should NOT be detected</b> as the selected part. They're used as hard negatives so the model learns to tell them apart. (No box needed — the whole image is the negative.)</div>
+        <div class="row">
+          <button class="btn" id="negCapture">◉ Capture from camera</button>
+          <button class="btn ghost" id="negUpload">Upload images…</button>
+          <input type="file" id="negFile" accept="image/*" multiple hidden>
+        </div>
+        <div class="status-msg" id="negMsg"></div>
+        <div class="sp"></div>
+        <div class="gallery" id="negGallery"></div>
+      </div>
+    </section>
+
+    <!-- TEST -->
+    <section class="view hidden" id="view-test">
+      <div class="grid cols-2">
+        <div class="panel">
+          <h3>Live</h3>
+          <div class="viewport">
+            <img id="testFeed" alt="">
+            <div class="hint" id="testHint">Camera not streaming.</div>
+          </div>
+          <div class="sp"></div>
+          <label class="fld">Model being tested
+            <select id="modelSelect"></select></label>
+          <div class="sp"></div>
+          <div class="row">
+            <label class="fld" style="flex:1">Confidence <span class="muted" id="confVal">0.25</span>
+              <input type="range" id="confSlider" min="0.05" max="0.95" step="0.05" value="0.25"></label>
+            <label class="fld" style="flex:1">Overlap (IoU/NMS) <span class="muted" id="iouVal">0.45</span>
+              <input type="range" id="iouSlider" min="0.10" max="0.90" step="0.05" value="0.45"></label>
+          </div>
+          <div class="muted" style="font-size:11px; margin:-4px 0 4px">Lower confidence finds more (and more false positives); lower overlap merges nearby boxes more aggressively. No retraining needed.</div>
+          <div class="sp"></div>
+          <div class="row">
+            <button class="btn" id="detectBtn">⊹ Detect</button>
+            <button class="btn ghost" id="uploadBtn">Upload image…</button>
+            <input type="file" id="fileInput" accept="image/*" hidden>
+            <button class="btn ghost" id="calibrateBtn">Set current as 0° default</button>
+          </div>
+          <div class="status-msg" id="testMsg"></div>
+        </div>
+        <div class="panel">
+          <h3>Result</h3>
+          <div id="resultWrap" style="position:relative">
+            <img id="resultImg" class="shot" alt="" style="display:none">
+            <canvas id="fixCanvas" style="position:absolute; inset:0; width:100%; height:100%; display:none; cursor:crosshair"></canvas>
+          </div>
+          <div class="sp"></div>
+          <table class="info" id="resultInfo"></table>
+          <div id="detList" class="muted" style="font-size:12px; margin-top:10px"></div>
+          <div id="feedbackRow" style="display:none; margin-top:16px; border-top:1px solid var(--line); padding-top:14px">
+            <div class="muted" style="font-size:12px; margin-bottom:8px">Is the facing right? Your answer is saved as a training example — retrain to teach the model. Use <b>Draw correct</b> to set the exact angle.</div>
+            <div class="row">
+              <button class="btn" id="fbYes">✓ Correct</button>
+              <button class="btn ghost" id="fbNo">✗ Flip it</button>
+              <button class="btn ghost" id="fbDraw">✎ Draw correct</button>
+            </div>
+            <div class="row" id="fbDrawRow" style="display:none; margin-top:8px">
+              <button class="btn" id="fbDrawSave" disabled>Save drawn facing</button>
+              <button class="btn ghost" id="fbDrawCancel">Cancel</button>
+            </div>
+            <div class="status-msg" id="fbMsg"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sp"></div>
+      <div class="grid cols-2">
+        <div class="panel">
+          <h3>Zoomed object</h3>
+          <img id="zoomImg" class="shot" alt="" style="display:none; image-rendering:pixelated">
+          <div class="muted" id="zoomHint" style="font-size:12px">Run a detection to see a close-up of the part.</div>
+        </div>
+        <div class="panel">
+          <h3>Grayscale + histogram</h3>
+          <img id="grayImg" class="shot" alt="" style="display:none">
+          <div class="sp"></div>
+          <canvas id="histCanvas" width="512" height="150" style="width:100%; background:#0a0c10; border:1px solid var(--line); border-radius:8px; display:none"></canvas>
+          <div class="muted" id="grayHint" style="font-size:12px">Run a detection to see the grayscale crop and its intensity histogram.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

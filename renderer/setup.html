@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vision Studio — Setup</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  body { display: block; padding: 0; }
+  .setup { max-width: 640px; margin: 0 auto; padding: 40px 28px; }
+  .setup .logo { width: 44px; height: 44px; border-radius: 11px; font-size: 24px;
+    background: linear-gradient(135deg, var(--accent), #7b5cff); display: grid; place-items: center; }
+  .setup h1 { font-size: 20px; margin: 16px 0 4px; }
+  .setup p.sub { color: var(--muted); margin: 0 0 22px; }
+  #status { font-weight: 600; margin-bottom: 10px; min-height: 20px; }
+  #status.err { color: var(--bad); }
+  #status.ok { color: var(--good); }
+  .bar { height: 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; margin-bottom: 14px; }
+  .bar > div { height: 100%; width: 30%; background: linear-gradient(90deg, var(--accent), #7b5cff);
+    border-radius: 999px; animation: slide 1.4s ease-in-out infinite; }
+  .bar.done > div { width: 100% !important; animation: none; }
+  .bar.idle { display: none; }
+  @keyframes slide { 0% { margin-left: -30%; } 100% { margin-left: 100%; } }
+  .row { display: flex; gap: 10px; margin-top: 16px; }
+</style>
+</head>
+<body>
+  <div class="setup">
+    <div class="logo">◎</div>
+    <h1>Setting up Vision Studio</h1>
+    <p class="sub">First-time setup prepares the detection engine. This runs once and may take a few minutes (it downloads PyTorch and the base model).</p>
+    <div id="status">Preparing…</div>
+    <div class="bar idle" id="bar"><div></div></div>
+    <div class="log" id="log" style="height:240px"></div>
+    <div class="row">
+      <button class="btn" id="launchBtn" style="display:none">Launch Vision Studio →</button>
+      <button class="btn" id="retryBtn" style="display:none">Retry</button>
+      <button class="btn ghost" id="detailsBtn">Show details</button>
+    </div>
+  </div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const log = $('log'); log.style.display = 'none';
+  $('detailsBtn').onclick = () => { log.style.display = log.style.display === 'none' ? 'block' : 'none'; };
+  if (window.vs && window.vs.onSetupLog) {
+    window.vs.onSetupLog((m) => { log.textContent += m; log.scrollTop = 1e9; });
+  }
+  function setStatus(t, kind) { $('status').textContent = t; $('status').className = kind || ''; }
+  async function runSetup() {
+    $('retryBtn').style.display = 'none'; $('launchBtn').style.display = 'none';
+    $('bar').className = 'bar'; setStatus('Setting up… (details below)');
+    log.textContent = '';
+    let r;
+    try { r = await window.vs.setupRun(); } catch (e) { r = { ok: false, error: String(e) }; }
+    if (r && r.ok) {
+      $('bar').className = 'bar done'; setStatus('Setup complete.', 'ok');
+      $('launchBtn').style.display = 'inline-block';
+    } else {
+      $('bar').className = 'bar idle'; setStatus('Setup failed: ' + (r && r.error || 'unknown error'), 'err');
+      log.style.display = 'block';
+      $('retryBtn').style.display = 'inline-block';
+    }
+  }
+  $('retryBtn').onclick = runSetup;
+  $('launchBtn').onclick = () => window.vs.setupContinue();
+  // auto-start
+  if (window.vs && window.vs.setupRun) runSetup();
+  else setStatus('Setup bridge unavailable (run the dev path: ./scripts/setup.sh).', 'err');
+</script>
+</body>
+</html>

@@ -1,0 +1,57 @@
+{
+  "name": "vision-studio",
+  "version": "0.1.0",
+  "description": "Collect, train, test, and export a custom object detector (with orientation) — no coding required.",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron . --no-sandbox",
+    "backend": "./.venv/bin/python backend/server.py",
+    "bundle-python": "bash scripts/bundle-python.sh",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.visionstudio.app",
+    "productName": "Vision Studio",
+    "asar": false,
+    "directories": {
+      "output": "installers"
+    },
+    "files": [
+      "electron/**/*",
+      "renderer/**/*",
+      "backend/**/*",
+      "package.json",
+      "!**/__pycache__/**",
+      "!**/*.pyc"
+    ],
+    "extraResources": [
+      {
+        "from": "pyenv",
+        "to": "pyenv"
+      }
+    ],
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Graphics",
+      "artifactName": "VisionStudio-${version}.${ext}"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.graphics-design"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
+  }
+}
