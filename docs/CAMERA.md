@@ -6,7 +6,7 @@ panel (click **Scan** to list what's attached, or enter an address).
 
 | Kind | What it is | Source you enter |
 | --- | --- | --- |
-| `oak` | OAK 4 (RVC4) over Ethernet — **default** | IP, e.g. `169.254.155.80` |
+| `oak` | OAK 4 (RVC4) over Ethernet — **default** | IP, e.g. `169.254.1.222` |
 | `usb` | local webcam / V4L2 device | an index, e.g. `0` |
 | `ip`  | RTSP or HTTP(MJPEG) network camera | a URL, e.g. `rtsp://…` |
 
@@ -18,7 +18,7 @@ The OAK 4 specifics below are baked into `backend/camera.py`.
 
 ## Connecting
 
-- Default address: **`169.254.155.80`** (link-local). Set yours on the Home
+- Default address: **`169.254.1.222`** (link-local). Set yours on the Home
   screen and click **Reconnect**, or pass `--device <ip>` to the backend.
 - The camera is reached through the on-device **gate** (port 9998). Auto-discovery
   and a plain `DeviceInfo(ip)` do **not** work over IP.

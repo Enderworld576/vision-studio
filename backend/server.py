@@ -2,7 +2,7 @@
 """Vision Studio backend — one HTTP service for camera, dataset, training,
 and detection. Serves the web UI (../renderer) and a JSON/MJPEG API.
 
-    python server.py [--port 8600] [--data-dir ../data] [--device 169.254.155.80]
+    python server.py [--port 8600] [--data-dir ../data] [--device 169.254.1.222]
 
 Everything the UI needs is under /api/*. State (config, dataset, models) lives
 in the data dir, so the app is fully self-contained.
@@ -33,7 +33,7 @@ RENDERER = HERE.parent / "renderer"
 
 class Config:
     """Tiny JSON-backed settings store."""
-    DEFAULTS = {"device": "169.254.155.80", "fps": 15, "zero_deg": 0.0,
+    DEFAULTS = {"device": "169.254.1.222", "fps": 15, "zero_deg": 0.0,
                 "target_class": "part", "active_model": None,
                 "camera_kind": "oak", "camera_source": None}  # source None -> device (OAK IP)
 

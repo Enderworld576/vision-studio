@@ -112,7 +112,7 @@ class BaseCamera:
 class OakCamera(BaseCamera):
     kind = "oak"
 
-    def __init__(self, source="169.254.155.80", fps=15, width=1920, height=1080,
+    def __init__(self, source="169.254.1.222", fps=15, width=1920, height=1080,
                  quality=90, label=None):
         super().__init__(source, fps, label or f"OAK 4 ({source})")
         self.width, self.height, self.quality = width, height, quality
@@ -201,13 +201,13 @@ class CvCamera(BaseCamera):
 def make_camera(kind, source, fps=15):
     kind = (kind or "oak").lower()
     if kind == "oak":
-        return OakCamera(source=source or "169.254.155.80", fps=fps)
+        return OakCamera(source=source or "169.254.1.222", fps=fps)
     if kind in ("usb", "ip"):
         return CvCamera(source=source, fps=fps, kind=kind)
     raise ValueError(f"unknown camera kind {kind!r}")
 
 
-def discover_cameras(oak_ip="169.254.155.80", probe_usb=4):
+def discover_cameras(oak_ip="169.254.1.222", probe_usb=4):
     """Best-effort list of cameras the app could connect to.
 
     Always offers the configured OAK (over IP) and any auto-discovered OAKs;
