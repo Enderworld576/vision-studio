@@ -6,6 +6,9 @@
 #
 #   ./scripts/bundle-python.sh        # then: npm run dist
 #
+# On Windows run it from Git Bash / MSYS (the GitHub windows-latest runner has
+# this as the default `bash`).
+#
 # Uses python-build-standalone + CPU-only PyTorch to keep the download small.
 set -e
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -16,11 +19,15 @@ cd "$ROOT"
 PBS_TAG="${PBS_TAG:-20240814}"
 PY_V="${PY_V:-3.11.9}"
 OS="$(uname -s)"; ARCH="$(uname -m)"
+WINDOWS=0
+case "$OS" in MINGW*|MSYS*|CYGWIN*) WINDOWS=1 ;; esac
+
 case "$OS-$ARCH" in
-  Linux-x86_64)   TRIPLE="x86_64-unknown-linux-gnu" ;;
-  Linux-aarch64)  TRIPLE="aarch64-unknown-linux-gnu" ;;
-  Darwin-arm64)   TRIPLE="aarch64-apple-darwin" ;;
-  Darwin-x86_64)  TRIPLE="x86_64-apple-darwin" ;;
+  Linux-x86_64)           TRIPLE="x86_64-unknown-linux-gnu" ;;
+  Linux-aarch64)          TRIPLE="aarch64-unknown-linux-gnu" ;;
+  Darwin-arm64)           TRIPLE="aarch64-apple-darwin" ;;
+  Darwin-x86_64)          TRIPLE="x86_64-apple-darwin" ;;
+  MINGW*-x86_64|MSYS*-x86_64|CYGWIN*-x86_64) TRIPLE="x86_64-pc-windows-msvc" ;;
   *) echo "Unsupported platform $OS-$ARCH — set PBS_URL manually."; exit 1 ;;
 esac
 PBS_URL="${PBS_URL:-https://github.com/astral-sh/python-build-standalone/releases/download/${PBS_TAG}/cpython-${PY_V}+${PBS_TAG}-${TRIPLE}-install_only.tar.gz}"
@@ -31,7 +38,15 @@ curl -fL "$PBS_URL" -o pyenv.tmp/python.tar.gz
 tar -xzf pyenv.tmp/python.tar.gz -C pyenv.tmp     # extracts to pyenv.tmp/python
 mv pyenv.tmp/python pyenv
 rm -rf pyenv.tmp
-PY="pyenv/bin/python3"
+
+# python-build-standalone lays the interpreter out differently per OS:
+#   unix:    pyenv/bin/python3
+#   windows: pyenv/python.exe   (pip etc. live in pyenv/Scripts)
+if [ "$WINDOWS" = "1" ]; then
+  PY="pyenv/python.exe"
+else
+  PY="pyenv/bin/python3"
+fi
 
 echo "==> installing CPU-only PyTorch + dependencies"
 "$PY" -m pip install --upgrade pip

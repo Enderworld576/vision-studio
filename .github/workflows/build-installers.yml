@@ -1,0 +1,67 @@
+name: Build installers
+
+# Builds the three desktop installers on their native OS runners and attaches
+# them to a GitHub Release.
+#
+#   * Push a tag like `v0.1.0`  -> builds and attaches to that release.
+#   * Or run manually (Actions tab -> "Run workflow") and give an existing tag
+#     (e.g. v0.1.0) to attach the macOS/Windows builds to a release you already
+#     created.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to attach installers to (e.g. v0.1.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: installers/*.AppImage
+          - os: macos-latest
+            artifact: installers/*.dmg
+          - os: windows-latest
+            artifact: installers/*.exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install JS dependencies
+        run: npm install
+
+      - name: Bundle self-contained Python runtime
+        shell: bash
+        run: bash scripts/bundle-python.sh
+
+      - name: Build installer
+        shell: bash
+        env:
+          # Skip macOS code-signing/notarization (unsigned build).
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --publish never
+
+      - name: Show build output
+        shell: bash
+        run: ls -la installers
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          files: ${{ matrix.artifact }}
+          fail_on_unmatched_files: true

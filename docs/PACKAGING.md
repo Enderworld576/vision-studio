@@ -36,12 +36,26 @@ npm run dist                 # electron-builder -> installers/  (AppImage / dmg 
 https://download.pytorch.org/whl/cpu`), which is far smaller than the default
 CUDA build. Expect roughly a few-hundred-MB installer.
 
-## CI (recommended for real releases)
-Build the three installers on their native runners (GitHub Actions matrix:
-`ubuntu-latest`, `macos-latest`, `windows-latest`), each running
-`bundle-python.sh` then `npm run dist`, and publish the artifacts. Override the
-standalone-Python release with `PBS_TAG` / `PBS_URL` / `PY_V` env vars in
-`bundle-python.sh` to pin or update versions.
+## CI — build all three on GitHub Actions (recommended)
+`.github/workflows/build-installers.yml` builds Linux/macOS/Windows installers
+on their native runners and attaches them to a GitHub Release. Two ways to run:
+
+- **Tag a release:** `git tag v0.1.0 && git push origin v0.1.0` → the workflow
+  builds all three and uploads them to the `v0.1.0` release.
+- **Attach to an existing release:** Actions tab → *Build installers* → *Run
+  workflow* → enter the tag (e.g. `v0.1.0`). Useful when the Linux build was
+  uploaded by hand and you just need macOS/Windows added.
+
+Each job runs `bundle-python.sh` then `electron-builder --publish never`, so the
+standalone-Python version can be pinned with `PBS_TAG` / `PBS_URL` / `PY_V`.
+
+Caveats for the hosted runners:
+- **macOS** (`macos-latest`) is Apple Silicon, so the `.dmg` is **arm64-only**;
+  Intel Macs need a separate `macos-13` job.
+- The build is **unsigned** (`CSC_IDENTITY_AUTO_DISCOVERY=false`); see the
+  signing notes below to silence Gatekeeper/SmartScreen.
+- **Private-repo Actions minutes** are metered (macOS counts 10×) — a full
+  three-OS build can use a few hundred minutes' worth.
 
 ## Notes / gotchas
 - macOS distribution outside the App Store needs code-signing + notarization to

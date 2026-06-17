@@ -15,7 +15,8 @@ const WIN = process.platform === 'win32';
 function pythonPath(app, root) {
   if (app && app.isPackaged) {
     const base = path.join(process.resourcesPath, 'pyenv');
-    return WIN ? path.join(base, 'Scripts', 'python.exe') : path.join(base, 'bin', 'python');
+    // python-build-standalone: python.exe is at the root on Windows, bin/ on unix.
+    return WIN ? path.join(base, 'python.exe') : path.join(base, 'bin', 'python');
   }
   return WIN ? path.join(root, '.venv', 'Scripts', 'python.exe')
              : path.join(root, '.venv', 'bin', 'python');
