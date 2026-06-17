@@ -57,9 +57,15 @@ train and test on uploaded image files with no camera at all.
 
 ### For most people — download and run (no terminal)
 Download the installer for your system and open it:
-- **Windows:** `VisionStudio-Setup.exe`
-- **macOS:** `VisionStudio.dmg`
-- **Linux:** `VisionStudio-*.AppImage` (make it executable, then run)
+- **Windows:** `Vision.Studio.Setup.*.exe`
+- **macOS:** `Vision.Studio-*.dmg` (Apple Silicon)
+- **Linux (recommended):** `VisionStudio-*.deb` — install with
+  `sudo dpkg -i VisionStudio-*.deb` (or double-click it). Runs sandboxed with no
+  extra flags.
+- **Linux (portable):** `VisionStudio-*.AppImage` — `chmod +x` then run. On
+  Ubuntu 24.04+ the AppImage must be started with `--no-sandbox`
+  (`./VisionStudio-*.AppImage --no-sandbox`) because an AppImage can't configure
+  the Chromium sandbox itself; the `.deb` doesn't have this caveat.
 
 On **first launch** a one-time **setup screen** appears: it verifies the bundled
 detection engine, downloads the base model, shows progress, and reports any

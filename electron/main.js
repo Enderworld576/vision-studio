@@ -10,11 +10,6 @@ const fs = require('node:fs');
 
 const setup = require('./setup');
 
-// Linux/Chromium SUID sandbox can't be set up from inside an AppImage / many
-// packaged contexts, so disable it here — users shouldn't need to pass
-// --no-sandbox manually.
-app.commandLine.appendSwitch('no-sandbox');
-
 const ROOT = path.resolve(__dirname, '..');
 const PY = setup.pythonPath(app, ROOT);
 // Port is chosen at launch: honor VS_PORT if set, else pick a free one so we

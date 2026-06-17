@@ -29,7 +29,9 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            artifact: installers/*.AppImage
+            artifact: |
+              installers/*.AppImage
+              installers/*.deb
           - os: macos-latest
             artifact: installers/*.dmg
           - os: windows-latest
