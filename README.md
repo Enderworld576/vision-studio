@@ -17,7 +17,6 @@ It bundles three things into one app:
    correct any wrong-facing arrows; then **export** the model bundle.
 
 ## Screenshots
-> Capture these four screens at ~1280×860 and drop them in `docs/`:
 
 | Home | Collect |
 | --- | --- |
