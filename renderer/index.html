@@ -18,7 +18,7 @@
       <button data-view="train"><span class="ico">⚙</span> Train <span class="step">2</span></button>
       <button data-view="test"><span class="ico">⊹</span> Test <span class="step">3</span></button>
     </nav>
-    <div class="foot">OAK 4 · YOLO11 · on-device camera</div>
+    <div class="foot" id="footStatus">YOLO11 · part detection</div>
   </aside>
 
   <main class="main">
@@ -141,7 +141,7 @@
               <div class="row">
                 <select id="classSelect" style="flex:1"></select>
                 <button class="btn ghost" id="addClassBtn">+ New</button>
-                <button class="btn ghost" id="delClassBtn" title="delete this part/class">🗑</button>
+                <button class="btn ghost" id="delClassBtn" title="delete this part/class">🗑 Delete</button>
               </div>
             </label>
           </div>

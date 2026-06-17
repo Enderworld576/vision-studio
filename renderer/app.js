@@ -29,7 +29,10 @@ async function poll() {
     lastCam = h.camera || {};
     setDot('camDot', 'camText', lastCam.streaming, lastCam.streaming ? 'camera live' : (lastCam.error ? 'camera error' : 'camera off'));
     setDot('modelDot', 'modelText', h.model_ready, h.model_ready ? h.model : 'no model');
-  } catch { setDot('camDot', 'camText', false, 'backend down'); }
+    const camName = lastCam.streaming ? (lastCam.label || lastCam.source || 'camera')
+      : (lastCam.error ? 'camera error' : 'no camera');
+    $('footStatus').textContent = `${camName} · YOLO11`;
+  } catch { setDot('camDot', 'camText', false, 'backend down'); $('footStatus').textContent = 'backend down'; }
 }
 function setDot(dotId, textId, on, text) {
   const d = $(dotId); d.className = 'dot ' + (on ? 'on' : 'off'); $(textId).textContent = text;
