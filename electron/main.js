@@ -16,6 +16,7 @@ const setup = require('./setup');
 app.commandLine.appendSwitch('no-sandbox');
 
 const ROOT = path.resolve(__dirname, '..');
+const PY = setup.pythonPath(app, ROOT);
 // Port is chosen at launch: honor VS_PORT if set, else pick a free one so we
 // never collide with another program (or another copy of this app) on a fixed
 // port.
