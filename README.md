@@ -4,7 +4,7 @@ A general-purpose app to teach a camera to **find your parts** in an image —
 **every instance**, with **where each is** (pixel location) and **which way it
 faces** (orientation) — no coding required. Point a camera at your part, label a
 few snapshots, click **Train**, test it live, and **export the model** (PyTorch
-+ ONNX) to use in your own programs.
+and ONNX) to use in your own programs.
 
 It is **not tuned to any specific part** — it learns whatever you label.
 
