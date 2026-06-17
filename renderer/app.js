@@ -76,20 +76,15 @@ async function loadCameras() {
   const r = await api('GET', '/api/cameras');
   const sel = $('cameraSelect');
   sel.innerHTML = r.cameras.map((c, i) =>
-    `<option value="${i}" data-kind="${c.kind}" data-source="${c.source}">${c.label}</option>`).join('')
-    + '<option value="custom">Custom (enter address)…</option>';
+    `<option value="${i}" data-kind="${c.kind}" data-source="${c.source}">${c.label}</option>`).join('');
   // pre-select the active camera if present
   const act = r.active || {};
   [...sel.options].forEach(o => { if (o.dataset.kind === act.kind && o.dataset.source == act.source) sel.value = o.value; });
 }
-$('cameraSelect').onchange = () => {
-  $('customRow').style.display = $('cameraSelect').value === 'custom' ? 'block' : 'none';
-};
 $('scanBtn').onclick = async () => { $('homeMsg').textContent = 'scanning for cameras…'; await loadCameras(); $('homeMsg').textContent = 'scan complete'; };
 $('useSelectedBtn').onclick = () => {
-  const sel = $('cameraSelect');
-  if (sel.value === 'custom') return connectCustom();
-  const o = sel.selectedOptions[0];
+  const o = $('cameraSelect').selectedOptions[0];
+  if (!o || !o.dataset.kind) { $('homeMsg').textContent = 'no camera selected — use “connect by address” below'; return; }
   connectCamera(o.dataset.kind, o.dataset.source);
 };
 $('connectBtn').onclick = () => connectCustom();
