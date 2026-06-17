@@ -5,14 +5,22 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
 const http = require('node:http');
+const net = require('node:net');
 const fs = require('node:fs');
 
 const setup = require('./setup');
 
+// Linux/Chromium SUID sandbox can't be set up from inside an AppImage / many
+// packaged contexts, so disable it here — users shouldn't need to pass
+// --no-sandbox manually.
+app.commandLine.appendSwitch('no-sandbox');
+
 const ROOT = path.resolve(__dirname, '..');
-const PORT = Number(process.env.VS_PORT || 8600);
-const URL = `http://127.0.0.1:${PORT}`;
-const PY = setup.pythonPath(app, ROOT);
+// Port is chosen at launch: honor VS_PORT if set, else pick a free one so we
+// never collide with another program (or another copy of this app) on a fixed
+// port.
+let PORT = Number(process.env.VS_PORT) || 0;
+let URL = '';
 // Packaged resources are read-only, so the backend writes data to a per-user
 // writable location; in dev it uses the project's data/ folder as before.
 const DATA_DIR = app.isPackaged ? path.join(app.getPath('userData'), 'data')
@@ -23,10 +31,25 @@ let backend = null;
 let win = null;
 let setupWin = null;
 
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.on('error', reject);
+    srv.listen(0, '127.0.0.1', () => {
+      const { port } = srv.address();
+      srv.close(() => resolve(port));
+    });
+  });
+}
+
 function startBackend() {
+  // Run with a writable cwd: the backend reads its own files via __file__, but
+  // libraries (e.g. depthai telemetry) write caches relative to cwd, which is
+  // read-only inside a packaged app.
+  try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch {}
   backend = spawn(PY, [path.join(ROOT, 'backend', 'server.py'),
                        '--port', String(PORT), '--data-dir', DATA_DIR],
-    { cwd: path.join(ROOT, 'backend'), stdio: ['ignore', 'pipe', 'pipe'] });
+    { cwd: DATA_DIR, stdio: ['ignore', 'pipe', 'pipe'] });
   backend.stdout.on('data', d => process.stdout.write(`[backend] ${d}`));
   backend.stderr.on('data', d => process.stdout.write(`[backend] ${d}`));
   backend.on('exit', c => console.log(`[backend] exited (${c})`));
@@ -59,9 +82,17 @@ function createSetupWindow() {
   setupWin.loadFile(path.join(ROOT, 'renderer', 'setup.html'));
 }
 
-function launchApp() {
+async function launchApp() {
+  if (!PORT) PORT = await freePort();
+  URL = `http://127.0.0.1:${PORT}`;
   startBackend();
-  waitForBackend((err) => { if (err) console.error(err.message); createWindow(); });
+  waitForBackend((err) => {
+    if (err) console.error(err.message);
+    createWindow();
+    // Close the setup window only AFTER the main window exists, otherwise there
+    // would be a moment with zero windows and the app would quit itself.
+    if (setupWin) { const w = setupWin; setupWin = null; w.close(); }
+  });
 }
 
 // --- IPC: native pickers --------------------------------------------------
@@ -90,8 +121,8 @@ ipcMain.handle('setup:run', async () => {
   }
 });
 ipcMain.handle('setup:continue', () => {
+  // launchApp() creates the main window and then closes the setup window.
   launchApp();
-  if (setupWin) { const w = setupWin; setupWin = null; w.close(); }
 });
 
 app.whenReady().then(async () => {
