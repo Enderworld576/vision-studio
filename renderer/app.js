@@ -413,7 +413,7 @@ function updateButtons() {
   $('clearBoxBtn').disabled = !(frozen && (annos.length || grid));
   $('delBoxBtn').disabled = sel < 0 || !!grid;
   $('dirBtn').disabled = sel < 0 || !!grid;
-  $('gridDirAll').disabled = !annos.length;
+  $('gridDirAll').disabled = !annos.length || !!grid;
   const n = annos.length, withDir = annos.filter(a => a.front && a.back).length;
   $('boxCount').textContent = frozen ? `${n} box${n === 1 ? '' : 'es'} · ${withDir} with direction${sel >= 0 ? ` · #${sel + 1} selected` : ''}` : '';
 }

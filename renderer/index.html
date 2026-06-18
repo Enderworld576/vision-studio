@@ -159,7 +159,8 @@
           <div class="row" style="flex-wrap:wrap; gap:8px">
             <button class="btn" id="captureBtn">◉ Capture frame</button>
             <button class="btn ghost" id="gridBtn" disabled title="auto-place a box in every cell of a tray">▦ Grid fill…</button>
-            <button class="btn ghost" id="dirBtn" disabled title="set front/back direction of the selected box">➤ Direction</button>
+            <button class="btn ghost" id="dirBtn" disabled title="set front/back direction of the SELECTED box">➤ Direction</button>
+            <button class="btn ghost" id="gridDirAll" disabled title="set ONE facing for every box (fixtured tray, all aligned)">➤ All directions</button>
             <button class="btn ghost" id="delBoxBtn" disabled title="delete the selected box">🗑 Box</button>
             <button class="btn ghost" id="clearBoxBtn" disabled>Clear all</button>
             <button class="btn" id="saveBtn" disabled>Save sample</button>
@@ -170,10 +171,9 @@
               <label class="fld">Cols <input type="number" id="gridCols" min="1" value="8" style="width:60px"></label>
               <label class="fld">Box fill % <input type="number" id="gridFill" min="30" max="98" value="80" style="width:68px"></label>
               <button class="btn" id="gridApply">✓ Apply grid</button>
-              <button class="btn ghost" id="gridDirAll" title="set one direction for every box (fixtured tray)">➤ Set all directions</button>
               <button class="btn ghost" id="gridCancel">Cancel</button>
             </div>
-            <div class="muted" style="margin-top:6px; font-size:12px">Drag the 4 yellow corners onto the tray · adjust Rows/Cols · click a cell to skip it (empty) · then <b>Apply grid</b>.</div>
+            <div class="muted" style="margin-top:6px; font-size:12px">Drag the 4 yellow corners onto the tray · adjust Rows/Cols · click a cell to skip it (empty) · <b>Apply grid</b> · then <b>➤ All directions</b> to orient them all at once.</div>
           </div>
           <div class="muted" id="boxCount" style="margin-top:6px; font-size:12px"></div>
           <div class="status-msg muted" id="collectMsg">Capture a frame (or click a saved image to edit). <b>Drag</b> a box around each part; <b>click</b> a box to select it, then set its <b>Direction</b> or <b>Delete</b> it. For a full tray, use <b>Grid fill</b>.</div>
