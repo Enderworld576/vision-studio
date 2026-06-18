@@ -308,13 +308,14 @@ $('gridDirAll').onclick = () => {
   fbAllMode = 'front'; fbMode = null;
   setMsg('collectMsg', 'Click FRONT then BACK once to set the SAME direction for every box (fixtured tray).');
 };
-function applyDirectionToAll(from, to) {
-  const dx = to.x - from.x, dy = to.y - from.y, len = Math.hypot(dx, dy) || 1;
+function applyDirectionToAll(frontPt, backPt) {
+  // Unit vector pointing toward FRONT (first click): front - back.
+  const dx = frontPt.x - backPt.x, dy = frontPt.y - backPt.y, len = Math.hypot(dx, dy) || 1;
   const ux = dx / len, uy = dy / len;
   annos.forEach(a => {
     const cx = a.x + a.w / 2, cy = a.y + a.h / 2, rad = Math.min(a.w, a.h) * 0.35;
-    a.front = { x: cx + ux * rad, y: cy + uy * rad };
-    a.back = { x: cx - ux * rad, y: cy - uy * rad };
+    a.front = { x: cx + ux * rad, y: cy + uy * rad };   // green dot, on the front side
+    a.back = { x: cx - ux * rad, y: cy - uy * rad };     // red dot, on the back side
   });
   redraw(); updateButtons();
 }
