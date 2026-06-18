@@ -156,12 +156,24 @@
             <button class="btn ghost" id="delClassNo">Cancel</button>
           </div>
           <div class="sp"></div>
-          <div class="row">
+          <div class="row" style="flex-wrap:wrap; gap:8px">
             <button class="btn" id="captureBtn">◉ Capture frame</button>
-            <button class="btn ghost" id="clearBoxBtn" disabled>Clear box</button>
+            <button class="btn ghost" id="gridBtn" disabled title="auto-place a box in every cell of a tray">▦ Grid fill…</button>
+            <button class="btn ghost" id="dirBtn" disabled title="set front/back direction of the selected box">➤ Direction</button>
+            <button class="btn ghost" id="delBoxBtn" disabled title="delete the selected box">🗑 Box</button>
+            <button class="btn ghost" id="clearBoxBtn" disabled>Clear all</button>
             <button class="btn" id="saveBtn" disabled>Save sample</button>
           </div>
-          <div class="status-msg muted" id="collectMsg">Capture a frame, draw a box, then click the <b>FRONT</b> and <b>BACK</b> of the part so the model learns its direction. Click a saved image to edit it.</div>
+          <div class="row" id="gridPanel" style="display:none; margin-top:8px; gap:8px; align-items:flex-end; flex-wrap:wrap">
+            <label class="fld">Rows <input type="number" id="gridRows" min="1" value="6" style="width:64px"></label>
+            <label class="fld">Cols <input type="number" id="gridCols" min="1" value="8" style="width:64px"></label>
+            <label class="fld">Box fill % <input type="number" id="gridFill" min="30" max="98" value="80" style="width:72px"></label>
+            <button class="btn" id="gridPick">Click 4 corners</button>
+            <button class="btn ghost" id="gridDirAll" title="set one direction for every box (fixtured tray)">Set all directions</button>
+            <button class="btn ghost" id="gridCancel">Cancel</button>
+          </div>
+          <div class="muted" id="boxCount" style="margin-top:6px; font-size:12px"></div>
+          <div class="status-msg muted" id="collectMsg">Capture a frame (or click a saved image to edit). <b>Drag</b> a box around each part; <b>click</b> a box to select it, then set its <b>Direction</b> or <b>Delete</b> it. For a full tray, use <b>Grid fill</b>.</div>
         </div>
         <div class="panel">
           <h3>Dataset <span class="muted" id="dsCount"></span>

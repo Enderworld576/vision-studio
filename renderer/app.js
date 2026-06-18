@@ -151,8 +151,14 @@ $('exportModelBtn').onclick = async () => {
 
 // ---- COLLECT --------------------------------------------------------------
 const canvas = $('collectCanvas'), ctx = canvas.getContext('2d');
-// Labeling state. step: idle -> box -> front -> back -> done
-let frozen = null, step = 'idle', box = null, front = null, back = null, drag = null, editStem = null;
+// Labeling state — supports MANY boxes per image.
+// annos: [{x,y,w,h, className, front, back}] in canvas px (front/back may be null).
+let frozen = null, editStem = null, drag = null, draftBox = null;
+let annos = [];           // every box on the current frame
+let sel = -1;             // selected annotation index (-1 = none)
+let fbMode = null;        // null | 'front' | 'back' — placing direction for `sel`
+let gridMode = false, gridCorners = null;   // 4-corner grid-fill picking
+let fbAllMode = null, gridFront = null;      // one-direction-for-all picking
 function enterCollect() {
   loadClasses(); refreshGallery();
   if (lastCam.streaming) { $('collectFeed').src = '/api/camera/stream?' + Date.now(); $('collectHint').style.display = 'none'; }
@@ -201,83 +207,184 @@ async function addClass() {
 }
 function blobToImage(blob) { return new Promise(res => { const i = new Image(); i.onload = () => res(i); i.src = URL.createObjectURL(blob); }); }
 function sizeCanvas() { const vp = $('collectVp').getBoundingClientRect(); canvas.width = vp.width; canvas.height = vp.height; }
+function resetLabeling() {
+  annos = []; sel = -1; fbMode = null; drag = null; draftBox = null;
+  gridMode = false; gridCorners = null; fbAllMode = null; gridFront = null;
+  $('gridPanel').style.display = 'none';
+}
 function backToLive() {
-  frozen = null; box = front = back = null; step = 'idle'; editStem = null;
+  frozen = null; editStem = null; resetLabeling();
   $('collectFeed').style.display = ''; $('collectFeed').src = lastCam.streaming ? '/api/camera/stream?' + Date.now() : '';
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  $('saveBtn').disabled = true; $('clearBoxBtn').disabled = true;
+  updateButtons();
 }
 $('captureBtn').onclick = async () => {
   const r = await fetch('/api/camera/snapshot'); if (!r.ok) { setMsg('collectMsg', 'camera not streaming', 'err'); return; }
   frozen = await blobToImage(await r.blob());
-  box = front = back = null; editStem = null; step = 'box';
-  $('collectFeed').style.display = 'none'; sizeCanvas(); redraw();
-  $('clearBoxBtn').disabled = false; updateSave();
-  setMsg('collectMsg', 'Drag a box around the part.');
+  editStem = null; resetLabeling();
+  $('collectFeed').style.display = 'none'; sizeCanvas(); redraw(); updateButtons();
+  setMsg('collectMsg', 'Drag a box around each part. Click a box to select it (then Direction / Box-delete). For a tray, use Grid fill.');
 };
-$('clearBoxBtn').onclick = () => { box = front = back = null; step = 'box'; redraw(); updateSave(); setMsg('collectMsg', 'Drag a box around the part.'); };
+$('clearBoxBtn').onclick = () => { resetLabeling(); redraw(); updateButtons(); setMsg('collectMsg', 'Cleared. Drag new boxes, or use Grid fill.'); };
+$('delBoxBtn').onclick = () => { if (sel >= 0) { annos.splice(sel, 1); sel = -1; fbMode = null; redraw(); updateButtons(); } };
+$('dirBtn').onclick = () => { if (sel >= 0) { fbMode = 'front'; setMsg('collectMsg', 'Click the FRONT of the selected part.'); } };
+
+// ---- grid fill (auto-box every cell of a fixtured tray) -------------------
+$('gridBtn').onclick = () => { if (frozen) $('gridPanel').style.display = ''; };
+$('gridCancel').onclick = () => { gridMode = false; gridCorners = null; $('gridPanel').style.display = 'none'; redraw(); updateButtons(); };
+$('gridPick').onclick = () => {
+  if (!frozen) return;
+  gridMode = true; gridCorners = []; fbMode = null; fbAllMode = null;
+  redraw(); setMsg('collectMsg', 'Click the 4 grid corners in order: top-left, top-right, bottom-right, bottom-left.');
+};
+$('gridDirAll').onclick = () => {
+  if (!annos.length) { setMsg('collectMsg', 'add boxes first (Grid fill), then set their direction', 'err'); return; }
+  fbAllMode = 'front'; gridMode = false; fbMode = null;
+  setMsg('collectMsg', 'Click FRONT then BACK once to set the SAME direction for every box (fixtured tray).');
+};
+// Bilinear position inside the quad [TL,TR,BR,BL] at fractions (u,v) in 0..1.
+function bilerp(q, u, v) {
+  const top = { x: q[0].x + (q[1].x - q[0].x) * u, y: q[0].y + (q[1].y - q[0].y) * u };
+  const bot = { x: q[3].x + (q[2].x - q[3].x) * u, y: q[3].y + (q[2].y - q[3].y) * u };
+  return { x: top.x + (bot.x - top.x) * v, y: top.y + (bot.y - top.y) * v };
+}
+function generateGrid() {
+  const rows = Math.max(1, parseInt($('gridRows').value, 10) || 0);
+  const cols = Math.max(1, parseInt($('gridCols').value, 10) || 0);
+  const fill = Math.min(0.98, Math.max(0.3, (parseInt($('gridFill').value, 10) || 80) / 100));
+  const cls = $('classSelect').value || '';
+  const made = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const corners = [
+      bilerp(gridCorners, c / cols, r / rows),
+      bilerp(gridCorners, (c + 1) / cols, r / rows),
+      bilerp(gridCorners, (c + 1) / cols, (r + 1) / rows),
+      bilerp(gridCorners, c / cols, (r + 1) / rows),
+    ];
+    const xs = corners.map(p => p.x), ys = corners.map(p => p.y);
+    const minx = Math.min(...xs), maxx = Math.max(...xs), miny = Math.min(...ys), maxy = Math.max(...ys);
+    const w = (maxx - minx) * fill, h = (maxy - miny) * fill;
+    made.push({ x: (minx + maxx) / 2 - w / 2, y: (miny + maxy) / 2 - h / 2, w, h, className: cls, front: null, back: null });
+  }
+  annos = annos.concat(made); gridCorners = null; sel = -1;
+  $('gridPanel').style.display = 'none';
+  redraw(); updateButtons();
+  setMsg('collectMsg', `Grid added ${made.length} boxes. Delete any empty-cell boxes (click → 🗑 Box), use "Set all directions", then Save.`);
+}
+function applyDirectionToAll(from, to) {
+  const dx = to.x - from.x, dy = to.y - from.y, len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len, uy = dy / len;
+  annos.forEach(a => {
+    const cx = a.x + a.w / 2, cy = a.y + a.h / 2, rad = Math.min(a.w, a.h) * 0.35;
+    a.front = { x: cx + ux * rad, y: cy + uy * rad };
+    a.back = { x: cx - ux * rad, y: cy - uy * rad };
+  });
+  redraw(); updateButtons();
+}
 
 function redraw() {
   if (!frozen) return;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(frozen, 0, 0, canvas.width, canvas.height);
-  if (box) {
-    ctx.strokeStyle = '#4c8dff'; ctx.lineWidth = 2; ctx.strokeRect(box.x, box.y, box.w, box.h);
-    ctx.fillStyle = 'rgba(76,141,255,.12)'; ctx.fillRect(box.x, box.y, box.w, box.h);
-  }
-  if (back && front) { ctx.strokeStyle = '#ff5c5c'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(back.x, back.y); ctx.lineTo(front.x, front.y); ctx.stroke(); }
-  drawPt(back, '#ff5c5c', 'B'); drawPt(front, '#3fbf7f', 'F');
+  annos.forEach((a, i) => {
+    const on = i === sel;
+    ctx.strokeStyle = on ? '#ffd24c' : '#4c8dff'; ctx.lineWidth = on ? 3 : 2; ctx.strokeRect(a.x, a.y, a.w, a.h);
+    ctx.fillStyle = on ? 'rgba(255,210,76,.16)' : 'rgba(76,141,255,.10)'; ctx.fillRect(a.x, a.y, a.w, a.h);
+    if (a.front && a.back) {
+      ctx.strokeStyle = '#ff5c5c'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(a.back.x, a.back.y); ctx.lineTo(a.front.x, a.front.y); ctx.stroke();
+      drawPt(a.back, '#ff5c5c', ''); drawPt(a.front, '#3fbf7f', '');
+    }
+  });
+  if (draftBox) { ctx.strokeStyle = '#4c8dff'; ctx.setLineDash([5, 4]); ctx.lineWidth = 2; ctx.strokeRect(draftBox.x, draftBox.y, draftBox.w, draftBox.h); ctx.setLineDash([]); }
+  if (gridCorners) gridCorners.forEach((c, i) => drawPt(c, '#ffd24c', String(i + 1)));
 }
 function drawPt(p, color, label) {
   if (!p) return;
-  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, 7); ctx.fill();
-  ctx.fillStyle = '#fff'; ctx.font = 'bold 13px system-ui'; ctx.fillText(label, p.x + 9, p.y - 9);
+  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, 7); ctx.fill();
+  if (label) { ctx.fillStyle = '#fff'; ctx.font = 'bold 12px system-ui'; ctx.fillText(label, p.x + 7, p.y - 7); }
+}
+function annoAt(p) {
+  for (let i = annos.length - 1; i >= 0; i--) { const a = annos[i]; if (p.x >= a.x && p.x <= a.x + a.w && p.y >= a.y && p.y <= a.y + a.h) return i; }
+  return -1;
 }
 canvas.addEventListener('mousedown', e => {
   if (!frozen) return; const p = pos(e);
-  if (step === 'box') { drag = p; }
-  else if (step === 'front') { front = p; step = 'back'; redraw(); updateSave(); setMsg('collectMsg', 'Now click the BACK of the part.'); }
-  else if (step === 'back') { back = p; step = 'done'; redraw(); updateSave(); setMsg('collectMsg', 'Looks good. Save, or click to re-place FRONT.'); }
-  else if (step === 'done') { front = p; back = null; step = 'back'; redraw(); updateSave(); setMsg('collectMsg', 'Now click the BACK of the part.'); }
+  if (gridMode) {                                   // picking the 4 grid corners
+    gridCorners.push(p); redraw();
+    if (gridCorners.length >= 4) { gridMode = false; generateGrid(); }
+    else setMsg('collectMsg', `Corner ${gridCorners.length}/4 — click ${['top-left', 'top-right', 'bottom-right', 'bottom-left'][gridCorners.length]}.`);
+    return;
+  }
+  if (fbAllMode === 'front') { gridFront = p; fbAllMode = 'back'; setMsg('collectMsg', 'Now click BACK (same direction for all).'); return; }
+  if (fbAllMode === 'back') { applyDirectionToAll(gridFront, p); fbAllMode = null; gridFront = null; setMsg('collectMsg', 'Direction applied to all boxes. Save when ready.'); return; }
+  if (fbMode === 'front' && sel >= 0) { annos[sel].front = p; fbMode = 'back'; redraw(); setMsg('collectMsg', 'Now click the BACK of the part.'); return; }
+  if (fbMode === 'back' && sel >= 0) { annos[sel].back = p; fbMode = null; redraw(); updateButtons(); setMsg('collectMsg', 'Direction set. Drag another box, select one, or Save.'); return; }
+  const hit = annoAt(p);
+  if (hit >= 0) { sel = hit; fbMode = null; redraw(); updateButtons(); setMsg('collectMsg', `Box #${sel + 1} selected — Direction, 🗑 Box, or drag a new box.`); return; }
+  drag = p; draftBox = null;            // start drawing a new box on empty space
 });
 canvas.addEventListener('mousemove', e => {
-  if (!drag || step !== 'box') return; const p = pos(e);
-  box = { x: Math.min(drag.x, p.x), y: Math.min(drag.y, p.y), w: Math.abs(p.x - drag.x), h: Math.abs(p.y - drag.y) }; redraw();
+  if (!drag) return; const p = pos(e);
+  draftBox = { x: Math.min(drag.x, p.x), y: Math.min(drag.y, p.y), w: Math.abs(p.x - drag.x), h: Math.abs(p.y - drag.y) }; redraw();
 });
 window.addEventListener('mouseup', () => {
-  if (drag && step === 'box' && box && box.w > 6 && box.h > 6) { step = 'front'; setMsg('collectMsg', 'Now click the FRONT of the part.'); updateSave(); }
-  drag = null;
+  if (drag && draftBox && draftBox.w > 6 && draftBox.h > 6) {
+    annos.push({ ...draftBox, className: $('classSelect').value || '', front: null, back: null });
+    sel = annos.length - 1;
+    setMsg('collectMsg', `Box #${sel + 1} added. Set its Direction, drag another, or Save.`);
+  }
+  drag = null; draftBox = null; redraw(); updateButtons();
+});
+document.addEventListener('keydown', e => {
+  if ($('view-collect').classList.contains('hidden') || !frozen) return;
+  if (/^(INPUT|SELECT|TEXTAREA)$/.test((document.activeElement || {}).tagName)) return;
+  if ((e.key === 'Delete' || e.key === 'Backspace') && sel >= 0) { e.preventDefault(); annos.splice(sel, 1); sel = -1; fbMode = null; redraw(); updateButtons(); }
 });
 function pos(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
-function updateSave() { $('saveBtn').disabled = !(frozen && box && box.w > 6 && box.h > 6); }
+function updateButtons() {
+  $('saveBtn').disabled = !(frozen && annos.length);
+  $('gridBtn').disabled = !frozen;
+  $('clearBoxBtn').disabled = !(frozen && (annos.length || gridCorners));
+  $('delBoxBtn').disabled = sel < 0;
+  $('dirBtn').disabled = sel < 0;
+  const n = annos.length, withDir = annos.filter(a => a.front && a.back).length;
+  $('boxCount').textContent = frozen ? `${n} box${n === 1 ? '' : 'es'} · ${withDir} with direction${sel >= 0 ? ` · #${sel + 1} selected` : ''}` : '';
+}
 
 async function editSample(stem) {
   const s = galAll.find(x => x.stem === stem); if (!s) return;
   go('collect');
   frozen = await blobToImage(await (await fetch('/api/samples/' + stem + '/image')).blob());
-  editStem = stem; $('collectFeed').style.display = 'none'; sizeCanvas();
-  const b = s.boxes[0];
-  box = { x: (b.cx - b.w / 2) * canvas.width, y: (b.cy - b.h / 2) * canvas.height, w: b.w * canvas.width, h: b.h * canvas.height };
-  if (b.keypoints) {
-    front = { x: b.keypoints[0][0] * canvas.width, y: b.keypoints[0][1] * canvas.height };
-    back = { x: b.keypoints[1][0] * canvas.width, y: b.keypoints[1][1] * canvas.height };
-    step = 'done';
-  } else { front = back = null; step = 'front'; }
-  if ([...$('classSelect').options].some(o => o.value === b.className)) $('classSelect').value = b.className;
-  redraw(); $('clearBoxBtn').disabled = false; updateSave();
-  setMsg('collectMsg', b.keypoints ? 'Editing — adjust, then Save.' : 'Editing — click FRONT then BACK to add direction, then Save.');
+  editStem = stem; resetLabeling();
+  $('collectFeed').style.display = 'none'; sizeCanvas();
+  (s.boxes || []).forEach(b => {
+    const a = { x: (b.cx - b.w / 2) * canvas.width, y: (b.cy - b.h / 2) * canvas.height,
+      w: b.w * canvas.width, h: b.h * canvas.height, className: b.className, front: null, back: null };
+    if (b.keypoints) {
+      a.front = { x: b.keypoints[0][0] * canvas.width, y: b.keypoints[0][1] * canvas.height };
+      a.back = { x: b.keypoints[1][0] * canvas.width, y: b.keypoints[1][1] * canvas.height };
+    }
+    annos.push(a);
+  });
+  if (annos.length && [...$('classSelect').options].some(o => o.value === annos[0].className)) $('classSelect').value = annos[0].className;
+  redraw(); updateButtons();
+  setMsg('collectMsg', `Editing ${annos.length} box(es) — add/select/delete, Grid fill, set directions, then Save.`);
 }
 
 $('saveBtn').onclick = async () => {
-  const cls = $('classSelect').value; if (!cls) { setMsg('collectMsg', 'add a part/class first', 'err'); return; }
-  if (!box || !frozen) return;
-  const norm = { className: cls,
-    cx: (box.x + box.w / 2) / canvas.width, cy: (box.y + box.h / 2) / canvas.height,
-    w: box.w / canvas.width, h: box.h / canvas.height };
-  if (front && back) norm.keypoints = [
-    [front.x / canvas.width, front.y / canvas.height],
-    [back.x / canvas.width, back.y / canvas.height]];
-  const body = { boxes: [norm] };
+  if (!frozen || !annos.length) return;
+  const defCls = $('classSelect').value || '';
+  const boxes = annos.map(a => {
+    const o = { className: a.className || defCls,
+      cx: (a.x + a.w / 2) / canvas.width, cy: (a.y + a.h / 2) / canvas.height,
+      w: a.w / canvas.width, h: a.h / canvas.height };
+    if (a.front && a.back) o.keypoints = [
+      [a.front.x / canvas.width, a.front.y / canvas.height],
+      [a.back.x / canvas.width, a.back.y / canvas.height]];
+    return o;
+  });
+  if (boxes.some(b => !b.className)) { setMsg('collectMsg', 'every box needs a class — pick one in the dropdown (it fills any blank boxes)', 'err'); return; }
+  const body = { boxes };
   if (editStem) body.stem = editStem;
   else {
     const c = document.createElement('canvas'); c.width = frozen.naturalWidth || frozen.width; c.height = frozen.naturalHeight || frozen.height;
@@ -286,7 +393,8 @@ $('saveBtn').onclick = async () => {
   }
   const r = await api('POST', '/api/samples', body);
   if (r.error) { setMsg('collectMsg', r.error, 'err'); return; }
-  setMsg('collectMsg', `${editStem ? 'updated' : 'saved'} ✓ — ${r.stats.images} images${front && back ? ' · front/back set' : ' (no direction yet)'}`, 'ok');
+  const withDir = boxes.filter(b => b.keypoints).length;
+  setMsg('collectMsg', `${editStem ? 'updated' : 'saved'} ✓ — ${boxes.length} boxes (${withDir} with direction) · ${r.stats.images} images`, 'ok');
   backToLive(); refreshGallery();
 };
 let galAll = [], galFilter = 'all', galPage = 0;
