@@ -16,14 +16,33 @@ import threading
 import traceback
 from pathlib import Path
 
-import cv2
 import torch
 from ultralytics import YOLO
 
-import orient_template as otmpl
-
 VAL_FRAC = 0.2    # held-out validation fraction; train and val never overlap
 MODEL_SIZES = ("n", "s", "m")
+# Orientation keypoints: 0 = front (e.g. the notch end), 1 = back. flip_idx is
+# identity because front/back are not a left/right symmetric pair.
+KPT_SHAPE = (2, 3)
+FLIP_IDX = (0, 1)
+
+
+def _label_line(cid, p, pose):
+    """One split-label line. Detection: `cid cx cy w h`. Pose: append the two
+    keypoints (front, back); boxes without a labeled direction get invisible
+    (v=0) keypoints so the pose loss is masked for them."""
+    box = " ".join(p[1:5])
+    if not pose:
+        return f"{cid} {box}"
+    kp = f"{p[5]} {p[6]} 2 {p[8]} {p[9]} 2" if len(p) >= 11 else "0 0 0 0 0 0"
+    return f"{cid} {box} {kp}"
+
+
+def _yaml(path, nc, names, pose):
+    body = f"path: {path}\ntrain: images/train\nval: images/val\nnc: {nc}\nnames: [{names}]\n"
+    if pose:
+        body += f"kpt_shape: [{KPT_SHAPE[0]}, {KPT_SHAPE[1]}]\nflip_idx: [{FLIP_IDX[0]}, {FLIP_IDX[1]}]\n"
+    return body
 
 
 class Trainer:
@@ -68,7 +87,7 @@ class Trainer:
         if class_name not in names:
             raise ValueError(f"class {class_name!r} not in dataset")
         target = names.index(class_name)
-        samples, has_kpts, ds_negs = [], False, []
+        samples, pose, ds_negs = [], False, []
         for lbl in sorted(self.dataset.labels.glob("*.txt")):
             img = self.dataset.images / f"{lbl.stem}.jpg"
             if not img.exists():
@@ -79,9 +98,9 @@ class Trainer:
                 if not p:
                     continue
                 if int(float(p[0])) == target:
-                    if len(p) >= 11:          # has front/back keypoints
-                        has_kpts = True
-                    kept.append("0 " + " ".join(p[1:5]))   # box only (detector)
+                    if len(p) >= 11:          # has front/back keypoints -> learned orientation
+                        pose = True
+                    kept.append(p)            # keep raw tokens; emit per pose mode below
                 else:
                     other = True
             if kept:
@@ -102,7 +121,8 @@ class Trainer:
             (out / "labels" / split).mkdir(parents=True, exist_ok=True)
             for img, kept in items:
                 shutil.copy2(img, out / "images" / split / img.name)
-                (out / "labels" / split / f"{img.stem}.txt").write_text("\n".join(kept) + "\n")
+                lines = [_label_line(0, p, pose) for p in kept]   # remap to class 0
+                (out / "labels" / split / f"{img.stem}.txt").write_text("\n".join(lines) + "\n")
         # Negatives = background images (empty label) so the model rejects them:
         # other labeled parts in the dataset (if enabled) + any manual negatives.
         negs = (ds_negs if dataset_negatives else []) + self.dataset.negatives_for(class_name)
@@ -119,11 +139,10 @@ class Trainer:
                       + (f" ({len(ds_negs)} from other dataset parts)"
                          if dataset_negatives and ds_negs else ""))
 
-        (out / "data.yaml").write_text(
-            f"path: {out}\ntrain: images/train\nval: images/val\nnc: 1\nnames: ['{class_name}']\n")
+        (out / "data.yaml").write_text(_yaml(out, 1, f"'{class_name}'", pose))
         self._say(f"prepared {len(splits['train'])} train / {len(splits['val'])} val"
-                  + (" (+ orientation labels)" if has_kpts else ""))
-        return out / "data.yaml", has_kpts, len(splits["train"]), len(splits["val"])
+                  + (" (+ learned orientation)" if pose else ""))
+        return out / "data.yaml", pose, len(splits["train"]), len(splits["val"])
 
     # -- run ----------------------------------------------------------------
     def start(self, class_name, epochs=150, imgsz=640, dataset_negatives=True,
@@ -144,25 +163,27 @@ class Trainer:
              multiclass=False, model_size="n"):
         try:
             if multiclass:
-                yaml, kpt_classes, n_train, n_val = self._prepare_multi(VAL_FRAC, dataset_negatives)
+                yaml, pose, n_train, n_val = self._prepare_multi(VAL_FRAC, dataset_negatives)
                 model_name = "all-parts.pt"
             else:
-                yaml, has_kpts, n_train, n_val = self._prepare_split(
+                yaml, pose, n_train, n_val = self._prepare_split(
                     class_name, VAL_FRAC, dataset_negatives=dataset_negatives)
-                kpt_classes = {class_name} if has_kpts else set()
                 model_name = f"{class_name}.pt"
             self.n_train, self.n_val = n_train, n_val
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
             self.state = "training"
-            self._say(f"training yolo11{model_size} on {self.device.upper()} "
+            task = "-pose" if pose else ""
+            self._say(f"training yolo11{model_size}{task} on {self.device.upper()} "
                       f"({n_train} train / {n_val} held-out val)…")
-            # Load the base weights from a WRITABLE location. Ultralytics
-            # downloads a bare "yolo11n.pt" into the current working directory,
-            # which in a packaged app is the read-only app bundle — so give it
-            # an absolute path under work_dir (matches what first-run setup
-            # pre-downloads, so it's reused rather than re-fetched).
+            # Load base weights from a WRITABLE location. Ultralytics would
+            # otherwise download into the CWD, which in a packaged app is the
+            # read-only app bundle — so download to an absolute work_dir path
+            # (first-run setup pre-fetches the plain detector there to reuse).
             self.work_dir.mkdir(parents=True, exist_ok=True)
-            base_weights = self.work_dir / f"yolo11{model_size}.pt"
+            base_weights = self.work_dir / f"yolo11{model_size}{task}.pt"
+            if not base_weights.exists():
+                from ultralytics.utils.downloads import attempt_download_asset
+                attempt_download_asset(str(base_weights))
             model = YOLO(str(base_weights))
 
             def on_epoch(trainer):
@@ -190,8 +211,8 @@ class Trainer:
             dest = self.models_dir / model_name
             shutil.copy2(best, dest)
             self.weights = str(dest)
-            if kpt_classes:               # per-class orientation references
-                self._save_templates(kpt_classes, dest)
+            # Orientation is learned by the pose model itself (front/back
+            # keypoints) — no separate appearance reference to build.
             self._collect_previews(run_dir)
             self.state = "done"
             self._say(f"done — {dest.name}"
@@ -215,47 +236,15 @@ class Trainer:
             shutil.copy2(src, dst)
             self.previews.append(str(dst))
 
-    def _orient_items(self, class_name):
-        """(bgr_img, box_px, front_deg) for each keypoint-labeled box of a class."""
-        names = self.dataset.classes()
-        target = names.index(class_name)
-        items = []
-        for lbl in self.dataset.labels.glob("*.txt"):
-            img_p = self.dataset.images / f"{lbl.stem}.jpg"
-            if not img_p.exists():
-                continue
-            for line in lbl.read_text().splitlines():
-                p = line.split()
-                if not p or int(float(p[0])) != target or len(p) < 11:
-                    continue
-                img = cv2.imread(str(img_p))
-                if img is None:
-                    continue
-                H, W = img.shape[:2]
-                cx, cy, w, h = float(p[1]), float(p[2]), float(p[3]), float(p[4])
-                box = ((cx - w / 2) * W, (cy - h / 2) * H, (cx + w / 2) * W, (cy + h / 2) * H)
-                fd = math.degrees(math.atan2((float(p[6]) - float(p[9])) * H,
-                                             (float(p[5]) - float(p[8])) * W)) % 360
-                items.append((img, box, fd))
-        return items
-
-    def _save_templates(self, class_names, model_path):
-        """Build a per-class orientation reference into <model>.orient/<class>.npz."""
-        odir = model_path.with_name(model_path.stem + ".orient")
-        odir.mkdir(parents=True, exist_ok=True)
-        for cn in class_names:
-            ref = otmpl.build_reference(self._orient_items(cn))
-            if ref is not None:
-                otmpl.save(odir / f"{otmpl.safe_name(cn)}.npz", ref)
-                self._say(f"built orientation reference for '{cn}'")
-
     def _prepare_multi(self, val_frac, dataset_negatives, seed=42):
         """Multi-class split: keep ALL classes with their original indices.
-        Returns (yaml, classes_with_keypoints, n_train, n_val)."""
+        If ANY class has front/back keypoints, build a POSE dataset (boxes
+        without a direction get invisible keypoints, masking their pose loss).
+        Returns (yaml, pose, n_train, n_val)."""
         names = self.dataset.classes()
         if not names:
             raise ValueError("no classes labeled yet")
-        samples, kpt_classes = [], set()
+        samples, pose = [], False
         for lbl in sorted(self.dataset.labels.glob("*.txt")):
             img = self.dataset.images / f"{lbl.stem}.jpg"
             if not img.exists():
@@ -269,8 +258,8 @@ class Trainer:
                 if cid >= len(names):
                     continue
                 if len(p) >= 11:
-                    kpt_classes.add(names[cid])
-                kept.append(f"{cid} " + " ".join(p[1:5]))   # original index, box only
+                    pose = True
+                kept.append(p)                          # raw tokens; original index
             if kept:
                 samples.append((img, kept))
         if len(samples) < 2:
@@ -286,7 +275,8 @@ class Trainer:
             (out / "labels" / split).mkdir(parents=True, exist_ok=True)
             for img, kept in items:
                 shutil.copy2(img, out / "images" / split / img.name)
-                (out / "labels" / split / f"{img.stem}.txt").write_text("\n".join(kept) + "\n")
+                lines = [_label_line(int(float(p[0])), p, pose) for p in kept]
+                (out / "labels" / split / f"{img.stem}.txt").write_text("\n".join(lines) + "\n")
         # In a multi-class model every labeled part is a POSITIVE (its own class),
         # so there are no "other parts as negatives" — the classes themselves
         # teach the model to distinguish them. Manually-added negative-example
@@ -304,12 +294,11 @@ class Trainer:
                     (out / "labels" / split / f"{img.stem}.txt").write_text("")
             self._say(f"+ {len(negs)} manual negative (background) images")
         nm = ", ".join(repr(n) for n in names)
-        (out / "data.yaml").write_text(
-            f"path: {out}\ntrain: images/train\nval: images/val\nnc: {len(names)}\nnames: [{nm}]\n")
+        (out / "data.yaml").write_text(_yaml(out, len(names), nm, pose))
         self._say(f"prepared {len(splits['train'])} train / {len(splits['val'])} val "
                   f"across {len(names)} classes"
-                  + (" (+ orientation labels)" if kpt_classes else ""))
-        return out / "data.yaml", kpt_classes, len(splits["train"]), len(splits["val"])
+                  + (" (+ learned orientation)" if pose else ""))
+        return out / "data.yaml", pose, len(splits["train"]), len(splits["val"])
 
     def status(self):
         return {

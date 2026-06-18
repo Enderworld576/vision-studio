@@ -65,7 +65,12 @@ class Vision:
 
     @property
     def has_orientation(self):
-        return bool(self._refs)
+        if self._refs:
+            return True
+        try:                                   # a pose model carries orientation itself
+            return getattr(self._load(), "task", "") == "pose"
+        except Exception:
+            return False
 
     def _load(self):
         if self._model is None:
@@ -76,6 +81,21 @@ class Vision:
 
     def _ref_for(self, class_name):
         return self._refs.get(otmpl.safe_name(class_name)) or self._refs.get("*")
+
+    def _pose_orient(self, bbox, kxy, kconf):
+        """Orientation straight from the model's front/back keypoints.
+        kxy: (2,2) [front,back] px; kconf: (2,) or None. Returns the same dict
+        shape as _orient. Low keypoint confidence (e.g. a box-only class) ->
+        no direction."""
+        x1, y1, x2, y2 = bbox
+        center = ((x1 + x2) / 2.0, (y1 + y2) / 2.0)
+        front, back = kxy[0], kxy[1]
+        vis = kconf is None or float(min(kconf)) >= 0.30
+        d = math.hypot(front[0] - back[0], front[1] - back[1])
+        if vis and d > 1.0:
+            ang = math.degrees(math.atan2(front[1] - back[1], front[0] - back[0])) % 360.0
+            return {"center": center, "box": None, "angle_deg": ang, "directed": True, "method": "pose"}
+        return {"center": center, "box": None, "angle_deg": None, "directed": False, "method": "none"}
 
     def _orient(self, img, bbox, class_name):
         ax = ori.shape_axis(img, bbox)
@@ -118,6 +138,11 @@ class Vision:
         xyxy = res.boxes.xyxy.cpu().numpy()
         cls = res.boxes.cls.cpu().numpy().astype(int)
         order = np.argsort(-confs)
+        # Learned orientation: a pose model returns front/back keypoints per box.
+        is_pose = getattr(model, "task", "") == "pose" and res.keypoints is not None
+        kp_xy = res.keypoints.xy.cpu().numpy() if is_pose else None
+        kp_cf = (res.keypoints.conf.cpu().numpy()
+                 if is_pose and res.keypoints.conf is not None else None)
 
         # de-duplicate per class (different classes may legitimately overlap)
         keep = []
@@ -141,7 +166,10 @@ class Vision:
             c = float(confs[idx])
             cid = int(cls[idx])
             cname = names[cid] if isinstance(names, (list, tuple)) else names.get(cid, str(cid))
-            pose = self._orient(img, bbox, cname)
+            if is_pose:
+                pose = self._pose_orient(bbox, kp_xy[idx], kp_cf[idx] if kp_cf is not None else None)
+            else:
+                pose = self._orient(img, bbox, cname)
             rel = (ori.relative_angle(pose["angle_deg"], zero_deg)
                    if pose["angle_deg"] is not None else None)
             if annotate:
